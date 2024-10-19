@@ -66,17 +66,29 @@ router.post('/upload', upload.single('photo'), getUserByIp, async (req: Request,
       return;
     }
 
-    // Сохранение промпта
-    if (prompt) {
-      const newPrompt = new PromptModel({
-        user: user._id,
-        promptText: prompt,
-      });
-      await newPrompt.save();
-      user.prompts.push(newPrompt._id);
-    }
 
-    // Отправка данных на внешний API и получение ответа
+   // Отправка данных на внешний API и получение ответа
+    // let apiResponseData: ExternalApiResponse | null = null;
+
+    // if (prompt || photo) {
+    // const externalApiUrl = process.env.EXTERNAL_API_URL as string;
+    // const formData = new FormData();
+
+    // if (prompt) formData.append('prompt', prompt);
+    // if (photo) {
+    //     formData.append('photo', photo.buffer, {
+    //     filename: photo.originalname,
+    //     contentType: photo.mimetype,
+    //     });
+    // }
+
+    // const apiResponse = await axios.post<ExternalApiResponse>(externalApiUrl, formData, {
+    //     headers: formData.getHeaders(),
+    // });
+
+    // apiResponseData = apiResponse.data;
+    // }
+
    // Временные фейковые данные вместо внешнего API
     const apiResponseData: ExternalApiResponse = {
         image_id: "5a53d770-0a00-4d31-92b9-d54688777db8",
@@ -114,20 +126,51 @@ router.post('/upload', upload.single('photo'), getUserByIp, async (req: Request,
       components: [],
     });
     await dimaEntry.save();
-
+    // let flag:Boolean = false
+    if (prompt) {
+        const newPrompt = new PromptModel({
+          user: user._id,
+          promptText: prompt,
+          s3Urls: components.map(component => component.object_model),
+          textResponce: description_of_item,
+          ts: [],
+        });
+      
+        user.prompts.push(newPrompt._id);
+      
+        // Проходим по каждому компоненту из внешнего API и сохраняем его
+        for (const comp of components) {
+          const component = new ComponentModel({
+            name_of_component: comp.name_of_component,
+            description_of_component: comp.description_of_component,
+            object_model: comp.object_model,
+            status: comp.status,
+            error: comp.error,
+          });
+      
+          // Сохраняем компонент в базе данных
+          await component.save();
+      
+          // Добавляем компонент в DimaModel и в PromptModel
+          dimaEntry.components.push(component._id);
+          newPrompt.ts.push({
+            name_of_component: comp.name_of_component,
+            description_of_component: comp.description_of_component,
+            object_model: comp.object_model,
+            status: comp.status,
+            error: comp.error,
+          });
+        }
+      
+        // Сохраняем изменения в DimaModel и PromptModel
+        await dimaEntry.save();
+        await newPrompt.save();
+        await user.save(); // Не забываем сохранять пользователя после добавления промпта
+      }
+      
+       // Сохранение промпта
     // Создание компонентов и добавление их в Dima
-    for (const comp of components) {
-      const component = new ComponentModel({
-        name_of_component: comp.name_of_component,
-        description_of_component: comp.description_of_component,
-        object_model: comp.object_model,
-        status: comp.status,
-        error: comp.error,
-      });
-      await component.save();
-      dimaEntry.components.push(component._id);
-    }
-    await dimaEntry.save();
+   
 
     // Создание записи в DeviceData
     const deviceData = new DeviceDataModel({
@@ -228,17 +271,17 @@ router.post('/upload', upload.single('photo'), getUserByIp, async (req: Request,
 //   }
 // });
 
-// Маршрут для получения всех чатов пользователя
-router.get('/chats', getUserByIp, async (req: Request, res: Response): Promise<void> => {
-  try {
-    const user = (req as any).user;
-    const chats = await ChatModel.find({ user: user._id }).populate('messages');
-    res.json({ success: true, data: chats });
-  } catch (error) {
-    console.error('Ошибка в /chats:', error);
-    res.status(500).json({ error: 'Внутренняя ошибка сервера' });
-  }
-});
+
+// router.get('/chats', getUserByIp, async (req: Request, res: Response): Promise<void> => {
+//   try {
+//     const user = (req as any).user;
+//     const chats = await ChatModel.find({ user: user._id }).populate('messages');
+//     res.json({ success: true, data: chats });
+//   } catch (error) {
+//     console.error('Ошибка в /chats:', error);
+//     res.status(500).json({ error: 'Внутренняя ошибка сервера' });
+//   }
+// });
 
 // Маршрут для получения всех промптов пользователя
 router.get('/prompts', getUserByIp, async (req: Request, res: Response): Promise<void> => {
